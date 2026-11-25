@@ -343,7 +343,9 @@ function drawNeedle(P,tail){
   ctx.strokeStyle=gr;ctx.lineWidth=f*.014;ctx.beginPath();ctx.moveTo(eye[0],eye[1]);ctx.lineTo(tip[0],tip[1]);ctx.stroke();
   ctx.save();ctx.translate(eye[0]+dx*f*.04,eye[1]+dy*f*.04);ctx.rotate(a);ctx.strokeStyle='#6c7076';ctx.lineWidth=f*.005;ctx.beginPath();ctx.ellipse(0,0,f*.028,f*.004+.4,0,0,7);ctx.stroke();ctx.restore();
 }
-let needle={x:0,y:0,a:-1.05},active=null,tail=null;
+let needle={x:0,y:0,a:-1.05},active=null,tail=null,placing=null;
+const PLACE_UP=72;
+function placePoint(){if(!placing)return null;const[bx,by]=scrToBase(placing.x,placing.y-PLACE_UP);return baseToWall(bx,by)}
 const layer=document.createElement('canvas'),lctx=layer.getContext('2d');
 let lay={ok:false,z:1,px:0,py:0},lastVC=0,prevV='';
 const baked=c=>c._st&&!c.un&&c.prog>=c._st.length;
@@ -354,6 +356,10 @@ function scene(z,tx,ty,mode,box){
   if(mode!=='top'){ctx.fillStyle=fabFor(z)||'#7d90a6';ctx.fillRect(box[0],box[1],box[2]-box[0],box[3]-box[1])}
   for(const c of chars){if(!c._st)continue;const b=baked(c);if(mode==='layer'&&!b)continue;if(mode==='top'&&b)continue;drawChar(c,Math.floor(c.prog),box,z)}
   if(mode==='top'&&holes.length){const hw=Math.max(.9,wdt()*.4);ctx.fillStyle='rgb(20,28,40)';for(const h of holes){ctx.globalAlpha=(1-h.t/1.2)*.3;ctx.beginPath();ctx.arc(h.x,h.y,hw,0,7);ctx.fill()}ctx.globalAlpha=1}
+  if(mode==='top'&&placing){const pv=placePoint(),a=toBase(pv[0],pv[1]),b=toBase(pv[0],pv[1]-FU*.75),c2=toBase(pv[0]+FU*.9,pv[1]);
+    ctx.lineCap='round';ctx.strokeStyle='rgba(243,239,230,.85)';ctx.lineWidth=1.6/z;ctx.setLineDash([5/z,5/z]);
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.globalAlpha=.45;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(c2[0],c2[1]);ctx.stroke();ctx.globalAlpha=1;ctx.setLineDash([]);
+    ctx.fillStyle='rgba(243,239,230,.95)';ctx.beginPath();ctx.arc(a[0],a[1],3/z,0,7);ctx.fill()}
   if(mode!=='layer')drawNeedle(pal(thread),tail);
 }
 function withCtx(g,fn){const m=ctx;ctx=g;try{fn()}finally{ctx=m}}
@@ -385,6 +391,7 @@ function frame(now){
   else if(unpAt){const f=F(),L=Math.hypot(unpAt.d[0],unpAt.d[1])||1;let nx=-unpAt.d[1]/L,ny=unpAt.d[0]/L;if(ny>0){nx=-nx;ny=-ny}
     const tx=unpAt.p[0]+nx*f*.42-unpAt.d[0]/L*f*.25,ty=unpAt.p[1]+ny*f*.42-unpAt.d[1]/L*f*.25;needle.x+=(tx-needle.x)*.09;needle.y+=(ty-needle.y)*.09;
     const ta=Math.atan2(needle.y-unpAt.p[1],needle.x-unpAt.p[0]);let da=ta-needle.a;da=Math.atan2(Math.sin(da),Math.cos(da));needle.a+=da*.15;tail=unpAt.p}
+  else if(placing){const pv=placePoint(),[tx,ty]=toBase(pv[0]+FU*.05,pv[1]-FU*.3);needle.x+=(tx-needle.x)*.4;needle.y+=(ty-needle.y)*.4;needle.a+=(-1.05-needle.a)*.2}
   else{const[tx,ty]=toBase(cur.x+FU*.05,cur.y-FU*.3);needle.x+=(tx-needle.x)*.14;needle.y+=(ty-needle.y)*.14;needle.a+=(-1.05-needle.a)*.1}
   const vmove=Math.abs(vt.z-view.z)+Math.abs(vt.px-view.px)+Math.abs(vt.py-view.py);
   if(vmove>.001){const k=RM?1:.2;view.z+=(vt.z-view.z)*k;view.py+=(vt.py-view.py)*k;view.px+=(vt.px-view.px)*k;if(vmove<.01)Object.assign(view,vt);$('#fit').hidden=vt.z<1.03}
@@ -392,7 +399,7 @@ function frame(now){
   const moving=now-lastVC<160||pts.size>0&&gest&&gest.moved>6;
   const layStale=!lay.ok||lay.z!==view.z||lay.px!==view.px||lay.py!==view.py;
   const nmove=!active&&Math.hypot(needle.x-toBase(cur.x+FU*.05,cur.y-FU*.3)[0],needle.y-toBase(cur.x+FU*.05,cur.y-FU*.3)[1])>.3;
-  if(!(dirty||active||unp||holes.length||moving||layStale||nmove||pending>0))return;
+  if(!(dirty||placing||active||unp||holes.length||moving||layStale||nmove||pending>0))return;
   dirty=false;
   if(!lay.ok||(layStale&&!moving))buildLayer();
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);
@@ -441,16 +448,21 @@ function zoomAt(X,Y,nz,instant){const t=instant?view:vt,[bx,by]=scrToBase(X,Y,t)
 cv.addEventListener('pointerdown',e=>{try{cv.setPointerCapture(e.pointerId)}catch(_){}pts.set(e.pointerId,[e.clientX,e.clientY]);
   if(pts.size===2){const[a,b]=[...pts.values()];gest={pinch:1,d:Math.hypot(a[0]-b[0],a[1]-b[1]),z:view.z,cx:(a[0]+b[0])/2,cy:(a[1]+b[1])/2,moved:99}}
   else gest={x:e.clientX,y:e.clientY,moved:0};
+  placing=(pts.size===1&&e.pointerType!=='mouse'&&!lensOn)?{x:e.clientX,y:e.clientY,t0:performance.now()}:null;dirty=true;
   if(lensOn){lensP=[e.clientX,e.clientY];dirty=true}});
 cv.addEventListener('pointermove',e=>{
   if(lensOn){lensP=[e.clientX,e.clientY];dirty=true}
   if(!pts.has(e.pointerId)||!gest)return;pts.set(e.pointerId,[e.clientX,e.clientY]);
+  if(placing&&pts.size===1){placing.x=e.clientX;placing.y=e.clientY;dirty=true;return}
   if(gest.pinch&&pts.size>=2){const[a,b]=[...pts.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]),cx=(a[0]+b[0])/2,cy=(a[1]+b[1])/2;
     view.px+=cx-gest.cx;view.py+=cy-gest.cy;gest.cx=cx;gest.cy=cy;zoomAt(cx,cy,gest.z*d/gest.d,true);return}
   const dx=e.clientX-gest.x,dy=e.clientY-gest.y;gest.x=e.clientX;gest.y=e.clientY;gest.moved+=Math.abs(dx)+Math.abs(dy);
   if(gest.moved>6&&!lensOn&&view.z>1.01){cv.classList.add('grab');view.px+=dx;view.py+=dy;clampView(view);Object.assign(vt,view);dirty=true}
 });
 const end=e=>{pts.delete(e.pointerId);cv.classList.remove('grab');
+  if(placing){const pv=placePoint();placing=null;dirty=true;
+    if(e.type==='pointerup'&&pv){cur={x:pv[0],y:pv[1],sx:pv[0],r:cur.r+1};save();ki.focus({preventScroll:true})}
+    if(pts.size===0)gest=null;return}
   if(gest&&!gest.pinch&&gest.moved<=6&&!lensOn&&e.type==='pointerup'){const[bx,by]=scrToBase(e.clientX,e.clientY),[x,y]=baseToWall(bx,by);cur={x:x-FU*.05,y:y+FU*.2,sx:x-FU*.05,r:cur.r+1};dirty=true;save();if(matchMedia('(pointer:coarse)').matches)ki.focus({preventScroll:true})}
   if(pts.size===0)gest=null;else if(gest&&gest.pinch){const[p]=[...pts.values()];gest={x:p[0],y:p[1],moved:99}}};
 cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
