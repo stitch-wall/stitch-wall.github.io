@@ -292,7 +292,7 @@ function photoStitch(a,b,k,seed,lifted){
   let dx=b[0]-a[0],dy=b[1]-a[1];const L=Math.hypot(dx,dy);if(L<.2)return;
   if(dx<0){const t=a;a=b;b=t;dx=-dx;dy=-dy}
   const i=Math.abs(seed)%PH.n,[x0,x1]=PH.body[i],sc=L*(lifted?1.08:.94)/(x1-x0),ang=Math.atan2(dy,dx);
-  const dw=PH.cw*sc,dh=PH.ch*sc,ox=-x0*sc+L*(lifted?-.04:.03),oy=-dh/2,src=tinted(k);
+  const m=Math.min(W,H),th=m<600?1.75:m<900?1.3:1,dw=PH.cw*sc,dh=PH.ch*sc*th,ox=-x0*sc+L*(lifted?-.04:.03),oy=-dh/2,src=tinted(k);
   const so=dh*(lifted?.5:.16);
   const ga=ctx.globalAlpha;ctx.save();ctx.translate(a[0]+so*.5,a[1]+so);ctx.rotate(ang);ctx.globalAlpha=ga*(lifted?.35:.55);
   ctx.drawImage(PH.shadow,0,i*(PH.ch+40),PH.cw+40,PH.ch+40,ox-20*sc,oy-20*sc,dw+40*sc,dh+40*sc);ctx.restore();
